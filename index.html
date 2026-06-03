@@ -157,9 +157,9 @@
 
     function toggleGrupos() { verTodosGrupos = !verTodosGrupos; render(); }
 
-    function editar(i, campo, valor) { 
-        partidos[i][campo] = parseInt(valor) || 0; 
-        partidos[i].jugado = true;
+    function editar(id, campo, val) { 
+        partidos[id][campo] = parseInt(val) || 0; 
+        partidos[id].jugado = true;
         localStorage.setItem('porraData', JSON.stringify(partidos)); 
         render(); 
     }
@@ -174,38 +174,40 @@
         const f = document.getElementById('fechaSelector').value;
         const selEq = document.getElementById('selectEquipo').value;
         const lista = document.getElementById('lista-partidos');
-        const seccionBusqueda = document.getElementById('seccion-busqueda');
         
-        seccionBusqueda.classList.toggle('hidden', isAdmin);
+        document.getElementById('seccion-busqueda').classList.toggle('hidden', isAdmin);
         
         const hoy = partidos.filter(p => p.fecha === f);
         lista.innerHTML = hoy.length > 0 ? hoy.map((p) => {
-            const index = partidos.indexOf(p);
+            const id = partidos.findIndex(x => x === p);
             return `<div class="partido">${p.equipo1} 
-                ${isAdmin ? `<input type="number" value="${p.g1}" onchange="editar(${index}, 'g1', this.value)">` : p.g1} 
+                ${isAdmin ? `<input type="number" value="${p.g1}" onchange="editar(${id}, 'g1', this.value)">` : p.g1} 
                 vs 
-                ${isAdmin ? `<input type="number" value="${p.g2}" onchange="editar(${index}, 'g2', this.value)">` : p.g2} 
+                ${isAdmin ? `<input type="number" value="${p.g2}" onchange="editar(${id}, 'g2', this.value)">` : p.g2} 
                 ${p.equipo2} <br><small>${p.grupo} - ${p.hora}</small></div>`
         }).join('') : "<p>No hay partidos este día.</p>";
 
-        const infoEq = document.getElementById('info-equipo');
-        const tablaEq = document.getElementById('tabla-equipo-seleccionado');
-        
-        if(!isAdmin && selEq) {
-            const pEq = partidos.filter(p => p.equipo1 === selEq || p.equipo2 === selEq);
-            infoEq.innerHTML = "<h3>Partidos de " + selEq + "</h3>" + pEq.map(p => 
-                `<div class="partido" style="font-size:0.8em">${p.fecha}: ${p.equipo1} ${p.g1} vs ${p.g2} ${p.equipo2}</div>`
-            ).join('');
-            const gEq = Object.keys(grupos).find(g => grupos[g].includes(selEq));
-            tablaEq.innerHTML = `<h3>Tabla ${gEq}</h3>` + generarTabla(gEq);
-        } else { infoEq.innerHTML = ""; tablaEq.innerHTML = ""; }
-
         const cont = document.getElementById('tablas-grupos');
         cont.innerHTML = "";
-        const gSeleccionado = !isAdmin && selEq ? [Object.keys(grupos).find(g => grupos[g].includes(selEq))] : null;
-        const m = gSeleccionado ? gSeleccionado : (verTodosGrupos ? Object.keys(grupos).sort() : [...new Set(hoy.map(p => p.grupo))]);
+        
+        let m = [];
+        if (!isAdmin && selEq) {
+            m = [Object.keys(grupos).find(g => grupos[g].includes(selEq))];
+        } else if (verTodosGrupos) {
+            m = Object.keys(grupos).sort();
+        } else {
+            m = [...new Set(hoy.map(p => p.grupo))];
+        }
         
         m.forEach(g => { if(g) cont.innerHTML += `<div><h3>${g}</h3>${generarTabla(g)}</div>`; });
+        
+        const infoEq = document.getElementById('info-equipo');
+        const tablaEq = document.getElementById('tabla-equipo-seleccionado');
+        if(!isAdmin && selEq) {
+            const pEq = partidos.filter(p => p.equipo1 === selEq || p.equipo2 === selEq);
+            infoEq.innerHTML = "<h3>Partidos de " + selEq + "</h3>" + pEq.map(p => `<div class="partido" style="font-size:0.8em">${p.fecha}: ${p.equipo1} ${p.g1} vs ${p.g2} ${p.equipo2}</div>`).join('');
+            tablaEq.innerHTML = `<h3>Tabla ${m[0]}</h3>` + generarTabla(m[0]);
+        } else { infoEq.innerHTML = ""; tablaEq.innerHTML = ""; }
     }
 
     function generarTabla(g) {
@@ -220,8 +222,11 @@
         return `<table class="tabla-grupo"><tr><th>Equipo</th><th>PTS</th></tr>` + orden.map(e => `<tr><td>${e}</td><td>${pts[e] || 0}</td></tr>`).join('') + `</table>`;
     }
 
-    window.onload = () => { document.getElementById('fechaSelector').value = "2026-06-11"; cargarEquipos(); render(); };
+    window.onload = () => { 
+        document.getElementById('fechaSelector').value = "2026-06-11"; 
+        cargarEquipos(); 
+        render(); 
+    };
 </script>
 </body>
 </html>
-
