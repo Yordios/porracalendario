@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>FutBeer Porra 2026</title>
+    <!-- Firebase SDK (compat version, una sola vez) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        body { background-image: url('logoporra.jpeg'); background-size: cover; background-position: center; background-attachment: fixed; color: white; font-family: sans-serif; text-align: center; padding: 20px; margin: 0; }
+        .container { background: rgba(0, 0, 0, 0.85); padding: 25px; border-radius: 20px; max-width: 900px; margin: auto; border: 2px solid #88d498; }
+        h1, h2 { color: #88d498; cursor: pointer; }
+        .partido { background: #2d5a27; margin: 10px 0; padding: 15px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .grid-grupos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
+        .tabla-grupo { width: 100%; border-collapse: collapse; background: #1a1a1a; font-size: 0.85em; }
+        .tabla-grupo th, .tabla-grupo td { padding: 6px; border: 1px solid #444; }
+        input[type="number"] { width: 40px; padding: 5px; border-radius: 4px; border: none; text-align: center; }
+        select { padding: 8px; width: 200px; border-radius: 5px; border: none; cursor: pointer; }
+        button { padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; font-weight: bold; border: none; background: #88d498; }
+        .hidden { display: none; }
+        #estado-sync { font-size: 0.8em; color: #aaa; margin-top: 5px; }
+        #estado-sync.ok { color: #88d498; }
+        #estado-sync.error { color: #ff6b6b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 id="titulo" ondblclick="toggleAdmin()">FutBeer Porra 2026</h1>
+    <div id="estado-sync">Conectando con la nube...</div>
+
+    <label>Día del Mundial:</label>
+    <input type="date" id="fechaSelector" onchange="render()" style="padding:8px; border-radius:5px; border:none; text-align:center;">
+    
+    <h2>Partidos del día</h2>
+    <div id="lista-partidos"></div>
+    <button onclick="toggleGrupos()">Ver todos los grupos</button>
+    
+    <div id="seccion-busqueda" style="margin-top:20px;">
+        <h2>Consultar Equipo</h2>
+        <select id="selectEquipo" onchange="render()"><option value="">Selecciona un equipo...</option></select>
+        <div id="info-equipo" style="margin-top:15px;"></div>
+        <div id="tabla-equipo-seleccionado" style="margin-top:10px;"></div>
+    </div>
+
+    <h2>Posiciones</h2>
+    <div id="tablas-grupos" class="grid-grupos"></div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBWONqVhrJST2OGmXNRB12YiFezt7fRzbE",
+        authDomain: "porracalendario.firebaseapp.com",
+        projectId: "porracalendario",
+        storageBucket: "porracalendario.firebasestorage.app",
+        messagingSenderId: "260889924811",
+        appId: "1:260889924811:web:413ad22b2ef8e869b0b74e"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const grupos = {
+        "Grupo A": ["México", "Sudáfrica", "Corea del Sur", "Chequia"],
+        "Grupo B": ["Canadá", "Bosnia", "Catar", "Suiza"],
+        "Grupo C": ["Brasil", "Marruecos", "Haití", "Escocia"],
+        "Grupo D": ["Estados Unidos", "Paraguay", "Australia", "Turquía"],
+        "Grupo E": ["Alemania", "Curazao", "Costa de Marfil", "Ecuador"],
+        "Grupo F": ["Países Bajos", "Japón", "Suecia", "Túnez"],
+        "Grupo G": ["Bélgica", "Egipto", "Fiyi", "Nueva Zelanda"],
+        "Grupo H": ["España", "Cabo Verde", "Arabia Saudí", "Uruguay"],
+        "Grupo I": ["Francia", "Senegal", "Irak", "Noruega"],
+        "Grupo J": ["Argentina", "Argelia", "Austria", "Jordania"],
+        "Grupo K": ["Portugal", "Uzbekistán", "Colombia", "Irán"],
+        "Grupo L": ["Inglaterra", "Croacia", "Ghana", "Panamá"]
+    };
+
+    const datosIniciales = [
+        { fecha: "2026-06-11", equipo1: "México", equipo2: "Sudáfrica", grupo: "Grupo A", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-12", equipo1: "Corea del Sur", equipo2: "Chequia", grupo: "Grupo A", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-12", equipo1: "Canadá", equipo2: "Bosnia", grupo: "Grupo B", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-13", equipo1: "Estados Unidos", equipo2: "Paraguay", grupo: "Grupo D", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-13", equipo1: "Catar", equipo2: "Suiza", grupo: "Grupo B", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-14", equipo1: "Brasil", equipo2: "Marruecos", grupo: "Grupo C", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-14", equipo1: "Haití", equipo2: "Escocia", grupo: "Grupo C", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-14", equipo1: "Australia", equipo2: "Turquía", grupo: "Grupo D", hora: "06:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-14", equipo1: "Alemania", equipo2: "Curazao", grupo: "Grupo E", hora: "19:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-14", equipo1: "Países Bajos", equipo2: "Japón", grupo: "Grupo F", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-15", equipo1: "Costa de Marfil", equipo2: "Ecuador", grupo: "Grupo E", hora: "01:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-15", equipo1: "Suecia", equipo2: "Túnez", grupo: "Grupo F", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-15", equipo1: "Bélgica", equipo2: "Egipto", grupo: "Grupo G", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-15", equipo1: "España", equipo2: "Cabo Verde", grupo: "Grupo H", hora: "18:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-16", equipo1: "Irán", equipo2: "Nueva Zelanda", grupo: "Grupo G", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-16", equipo1: "Arabia Saudí", equipo2: "Uruguay", grupo: "Grupo H", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-16", equipo1: "Francia", equipo2: "Senegal", grupo: "Grupo I", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-17", equipo1: "Irak", equipo2: "Noruega", grupo: "Grupo I", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-17", equipo1: "Argentina", equipo2: "Argelia", grupo: "Grupo J", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-17", equipo1: "Austria", equipo2: "Jordania", grupo: "Grupo J", hora: "06:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-17", equipo1: "Portugal", equipo2: "Congo", grupo: "Grupo K", hora: "19:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-17", equipo1: "Inglaterra", equipo2: "Croacia", grupo: "Grupo L", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-18", equipo1: "Uzbekistán", equipo2: "Colombia", grupo: "Grupo K", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-18", equipo1: "Chequia", equipo2: "Sudáfrica", grupo: "Grupo A", hora: "18:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-18", equipo1: "Suiza", equipo2: "Bosnia", grupo: "Grupo B", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-18", equipo1: "Ghana", equipo2: "Panamá", grupo: "Grupo L", hora: "01:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-19", equipo1: "Canadá", equipo2: "Catar", grupo: "Grupo B", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-19", equipo1: "México", equipo2: "Corea del Sur", grupo: "Grupo A", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-19", equipo1: "Estados Unidos", equipo2: "Australia", grupo: "Grupo D", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-20", equipo1: "Escocia", equipo2: "Marruecos", grupo: "Grupo C", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-20", equipo1: "Brasil", equipo2: "Haití", grupo: "Grupo C", hora: "02:30", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-20", equipo1: "Turquía", equipo2: "Paraguay", grupo: "Grupo D", hora: "05:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-20", equipo1: "Países Bajos", equipo2: "Suecia", grupo: "Grupo F", hora: "19:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-20", equipo1: "Alemania", equipo2: "Costa de Marfil", grupo: "Grupo E", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-21", equipo1: "Ecuador", equipo2: "Curazao", grupo: "Grupo E", hora: "02:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-21", equipo1: "Túnez", equipo2: "Japón", grupo: "Grupo F", hora: "06:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-21", equipo1: "España", equipo2: "Arabia Saudí", grupo: "Grupo H", hora: "18:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-21", equipo1: "Bélgica", equipo2: "Irán", grupo: "Grupo G", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-22", equipo1: "Uruguay", equipo2: "Cabo Verde", grupo: "Grupo H", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-22", equipo1: "Nueva Zelanda", equipo2: "Egipto", grupo: "Grupo G", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-22", equipo1: "Argentina", equipo2: "Austria", grupo: "Grupo J", hora: "19:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-22", equipo1: "Francia", equipo2: "Irak", grupo: "Grupo I", hora: "23:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-23", equipo1: "Noruega", equipo2: "Senegal", grupo: "Grupo I", hora: "02:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-23", equipo1: "Jordania", equipo2: "Argelia", grupo: "Grupo J", hora: "05:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-23", equipo1: "Portugal", equipo2: "Uzbekistán", grupo: "Grupo K", hora: "19:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-23", equipo1: "Inglaterra", equipo2: "Ghana", grupo: "Grupo L", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-24", equipo1: "Panamá", equipo2: "Croacia", grupo: "Grupo L", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-24", equipo1: "Colombia", equipo2: "Congo", grupo: "Grupo K", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-24", equipo1: "Suiza", equipo2: "Canadá", grupo: "Grupo B", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-24", equipo1: "Bosnia", equipo2: "Catar", grupo: "Grupo B", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Escocia", equipo2: "Brasil", grupo: "Grupo C", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Marruecos", equipo2: "Haití", grupo: "Grupo C", hora: "00:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Sudáfrica", equipo2: "Corea del Sur", grupo: "Grupo A", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Chequia", equipo2: "México", grupo: "Grupo A", hora: "03:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Ecuador", equipo2: "Alemania", grupo: "Grupo E", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-25", equipo1: "Curazao", equipo2: "Costa de Marfil", grupo: "Grupo E", hora: "22:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Túnez", equipo2: "Países Bajos", grupo: "Grupo F", hora: "01:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Japón", equipo2: "Suecia", grupo: "Grupo F", hora: "01:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Turquía", equipo2: "Estados Unidos", grupo: "Grupo D", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Panamá", equipo2: "Croacia", grupo: "Grupo D", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Senegal", equipo2: "Irak", grupo: "Grupo I", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-26", equipo1: "Noruega", equipo2: "Francia", grupo: "Grupo I", hora: "21:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Uruguay", equipo2: "España", grupo: "Grupo H", hora: "02:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Cabo Verde", equipo2: "Arabia Saudí", grupo: "Grupo H", hora: "02:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Nueva Zelanda", equipo2: "Bélgica", grupo: "Grupo G", hora: "05:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Egipto", equipo2: "Irán", grupo: "Grupo G", hora: "05:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Panamá", equipo2: "Inglaterra", grupo: "Grupo L", hora: "23:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-27", equipo1: "Croacia", equipo2: "Ghana", grupo: "Grupo L", hora: "23:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-28", equipo1: "Jordania", equipo2: "Argentina", grupo: "Grupo J", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-28", equipo1: "Argelia", equipo2: "Austria", grupo: "Grupo J", hora: "04:00", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-28", equipo1: "Congo", equipo2: "Uzbekistán", grupo: "Grupo K", hora: "01:30", g1: 0, g2: 0, jugado: false },
+        { fecha: "2026-06-28", equipo1: "Colombia", equipo2: "Portugal", grupo: "Grupo K", hora: "01:30", g1: 0, g2: 0, jugado: false }
+    ];
+
+    let partidos = [...datosIniciales];
+    let isAdmin = false;
+    let verTodosGrupos = false;
+
+    // Escucha cambios en tiempo real: cuando alguien guarda, TODOS los dispositivos se actualizan
+    function iniciarEscuchaFirebase() {
+        db.collection("config").doc("partidos")
+            .onSnapshot((doc) => {
+                const estadoEl = document.getElementById('estado-sync');
+                if (doc.exists) {
+                    partidos = doc.data().lista;
+                    estadoEl.textContent = "✅ Sincronizado con la nube";
+                    estadoEl.className = "ok";
+                } else {
+                    guardarDatosFirebase();
+                    estadoEl.textContent = "✅ Datos iniciales cargados en la nube";
+                    estadoEl.className = "ok";
+                }
+                render();
+            }, (error) => {
+                const estadoEl = document.getElementById('estado-sync');
+                estadoEl.textContent = "⚠️ Sin conexión - usando datos locales";
+                estadoEl.className = "error";
+                console.error("Error Firebase:", error);
+            });
+    }
+
+    function guardarDatosFirebase() {
+        db.collection("config").doc("partidos").set({
+            lista: partidos
+        }).catch(err => console.error("Error al guardar:", err));
+    }
+
+    function toggleAdmin() {
+        if (!isAdmin) {
+            if (prompt("Contraseña:") === "admin2026") { isAdmin = true; render(); }
+        } else {
+            if (confirm("¿Resetear todos los resultados?")) {
+                partidos = [...datosIniciales];
+                guardarDatosFirebase();
+                isAdmin = false;
+                render();
+            }
+        }
+    }
+
+    function toggleGrupos() { verTodosGrupos = !verTodosGrupos; render(); }
+
+    function editar(i, campo, valor) {
+        partidos[i][campo] = parseInt(valor) || 0;
+        partidos[i].jugado = true;
+        guardarDatosFirebase();
+        render();
+    }
+
+    function cargarEquipos() {
+        const select = document.getElementById('selectEquipo');
+        const todos = [...new Set(Object.values(grupos).flat())].sort();
+        todos.forEach(eq => select.innerHTML += `<option value="${eq}">${eq}</option>`);
+    }
+
+    function render() {
+        const f = document.getElementById('fechaSelector').value;
+        const selEq = document.getElementById('selectEquipo').value;
+        const lista = document.getElementById('lista-partidos');
+        const seccionBusqueda = document.getElementById('seccion-busqueda');
+
+        seccionBusqueda.classList.toggle('hidden', isAdmin);
+
+        const hoy = partidos.filter(p => p.fecha === f);
+        lista.innerHTML = hoy.length > 0 ? hoy.map((p) => {
+            const index = partidos.indexOf(p);
+            return `<div class="partido">${p.equipo1}
+                ${isAdmin ? `<input type="number" value="${p.g1}" onchange="editar(${index}, 'g1', this.value)">` : `<strong>${p.g1}</strong>`}
+                vs
+                ${isAdmin ? `<input type="number" value="${p.g2}" onchange="editar(${index}, 'g2', this.value)">` : `<strong>${p.g2}</strong>`}
+                ${p.equipo2}<br><small>${p.grupo} - ${p.hora}</small></div>`;
+        }).join('') : "<p>No hay partidos este día.</p>";
+
+        const infoEq = document.getElementById('info-equipo');
+        const tablaEq = document.getElementById('tabla-equipo-seleccionado');
+
+        if (!isAdmin && selEq) {
+            const pEq = partidos.filter(p => p.equipo1 === selEq || p.equipo2 === selEq);
+            infoEq.innerHTML = "<h3>Partidos de " + selEq + "</h3>" + pEq.map(p =>
+                `<div class="partido" style="font-size:0.8em">${p.fecha}: ${p.equipo1} ${p.g1} vs ${p.g2} ${p.equipo2}</div>`
+            ).join('');
+            const gEq = Object.keys(grupos).find(g => grupos[g].includes(selEq));
+            tablaEq.innerHTML = `<h3>Tabla ${gEq}</h3>` + generarTabla(gEq);
+        } else { infoEq.innerHTML = ""; tablaEq.innerHTML = ""; }
+
+        const cont = document.getElementById('tablas-grupos');
+        cont.innerHTML = "";
+        const gSeleccionado = !isAdmin && selEq ? [Object.keys(grupos).find(g => grupos[g].includes(selEq))] : null;
+        const m = gSeleccionado ? gSeleccionado : (verTodosGrupos ? Object.keys(grupos) : [...new Set(hoy.map(p => p.grupo))]);
+        m.forEach(g => cont.innerHTML += `<div><h3>${g}</h3>${generarTabla(g)}</div>`);
+    }
+
+    function generarTabla(g) {
+        if (!g) return "";
+        let pts = {}; grupos[g].forEach(e => pts[e] = 0);
+        partidos.filter(p => p.grupo === g && p.jugado === true).forEach(p => {
+            if (p.g1 > p.g2) pts[p.equipo1] += 3;
+            else if (p.g2 > p.g1) pts[p.equipo2] += 3;
+            else { pts[p.equipo1] += 1; pts[p.equipo2] += 1; }
+        });
+        const orden = grupos[g].slice().sort((a, b) => (pts[b] || 0) - (pts[a] || 0));
+        return `<table class="tabla-grupo"><tr><th>Equipo</th><th>PTS</th></tr>` +
+            orden.map(e => `<tr><td>${e}</td><td>${pts[e] || 0}</td></tr>`).join('') +
+            `</table>`;
+    }
+
+    window.onload = () => {
+        document.getElementById('fechaSelector').value = new Date().toISOString().slice(0, 10);
+        cargarEquipos();
+        iniciarEscuchaFirebase();
+    };
+</script>
+</body>
+</html>
